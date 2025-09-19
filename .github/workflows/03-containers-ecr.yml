@@ -1,0 +1,114 @@
+name: "Nível 3: Containers e Segurança"
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [ main ]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  NODE_VERSION: '18'
+  CHALLENGE_LEVEL: 3
+  CHALLENGE_NAME: "containers-seguros"
+  IMAGE_REGISTRY: ghcr.io
+  REGISTRY: ghcr.io
+
+jobs:
+  build-scan-and-push:
+    name: "Build, Trivy Scan e Push no GHCR"
+    if: ${{ github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout do código"
+        uses: actions/checkout@v4
+
+      - name: "Login no GHCR"
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Compila nome do repo"
+        id: compile
+        run: |
+          FULL_IMAGE=$( echo "${REGISTRY}/${{ github.repository_owner }}/${{ vars.IMAGE_NAME }}:${{ github.sha }}" | tr '[:upper:]' '[:lower:]')
+          echo "full_image=$FULL_IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: "Build da imagem (load para scan)"
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ steps.compile.outputs.full_image }}
+
+      - name: "Trivy - Scan de vulnerabilidades (falha se CRITICAL)"
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.compile.outputs.full_image }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL'
+
+      - name: "Build & push"
+        id: build
+        uses: docker/build-push-action@v6
+        if: ${{ success() }}
+        with:
+          context: .
+          tags: ${{ steps.compile.outputs.full_image }}
+          push: true
+          provenance: false
+          sbom: false
+
+  generate-certificate: # DAQUI PARA BAIXO, NÃO ALTERAR
+    name: "Desafio Nível 3 - Certificado"
+    needs: build-scan-and-push
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Gerar certificado"
+        run: |
+          mkdir -p certificates
+          cat > certificates/level-3-certificate.md << EOF
+          # Certificado de Conclusão - Nível 3
+
+          **Descomplicando Github Actions - GitHub Actions Edition**
+          ---
+
+          Este certificado atesta que **${{ github.actor }}** concluiu com sucesso:
+          ## Nível 3: Containers e Segurança
+
+          **Competências desenvolvidas:**
+          - Build de imagem Docker
+          - Scan de vulnerabilidades com Trivy (CRITICAL = 0)
+          - Publicação no GitHub Container Registry (GHCR) condicionada ao scan
+          - Boas práticas de supply chain
+
+          **Data de conclusão:** $(date)
+          **Repositório:** ${{ github.repository }}
+          **Workflow:** ${{ github.run_id }}
+
+          ---
+          **Badge conquistado:** Containers e Segurança
+
+          ---
+          *Certificado gerado automaticamente pelo GitHub Actions*
+          *LINUXtips*
+          EOF
+
+      - name: "Upload do certificado"
+        uses: actions/upload-artifact@v4
+        with:
+          name: level-3-certificate
+          path: certificates/
+          retention-days: 30
+
+
