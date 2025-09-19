@@ -18,13 +18,42 @@ env:
 
 jobs:
   build-scan-and-push:
-    name: "Build, Trivy Scan e Push no GHCR"
+    name: "Build, Lint, Trivy Scan e Push no GHCR"
     if: ${{ github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
 
     steps:
       - name: "Checkout do código"
         uses: actions/checkout@v4
+
+      - name: "Dockerfile Lint (Hadolint)"
+        id: hadolint
+        shell: bash
+        run: |
+          if [[ ! -f Dockerfile ]]; then
+            echo "::error::Dockerfile não encontrado na raiz do repositório."
+            exit 1
+          fi
+
+          # Roda hadolint via container e salva o relatório
+          docker run --rm -i hadolint/hadolint < Dockerfile > lint-report.txt || true
+
+          echo "Relatório do Hadolint:"
+          cat lint-report.txt || true
+
+          # Falha se encontrar regras específicas
+          if grep -E 'DL3006|DL3008|DL4006' lint-report.txt >/dev/null 2>&1; then
+            echo "::error::Hadolint encontrou violações bloqueadoras (DL3006, DL3008 ou DL4006)."
+            exit 1
+          fi
+
+      - name: "Upload lint-report.txt"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: lint-report.txt
+          retention-days: 30
 
       - name: "Login no GHCR"
         uses: docker/login-action@v3
@@ -39,7 +68,7 @@ jobs:
           FULL_IMAGE=$( echo "${REGISTRY}/${{ github.repository_owner }}/${{ vars.IMAGE_NAME }}:${{ github.sha }}" | tr '[:upper:]' '[:lower:]')
           echo "full_image=$FULL_IMAGE" >> "$GITHUB_OUTPUT"
 
-      - name: "Build da imagem (load para scan)"
+      - name: "Build da imagem"
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -47,7 +76,26 @@ jobs:
           load: true
           tags: ${{ steps.compile.outputs.full_image }}
 
-      - name: "Trivy - Scan de vulnerabilidades (falha se CRITICAL)"
+      - name: "Trivy - Gerar relatório (sem falhar)"
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.compile.outputs.full_image }}
+          format: 'table'
+          output: 'trivy-report.txt'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL'
+
+      - name: "Upload trivy-report.txt"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.txt
+          retention-days: 30
+
+      - name: "Trivy - Enforcement (falha se CRITICAL)"
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ steps.compile.outputs.full_image }}
@@ -56,6 +104,17 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL'
+
+      - name: "Teste de execução da imagem (node --version)"
+        id: smoketest
+        run: |
+          set -euo pipefail
+          VERSION=$(docker run --rm ${{ steps.compile.outputs.full_image }} node --version || true)
+          echo "Node version output: ${VERSION}"
+          if [[ -z "${VERSION}" ]]; then
+            echo "::error::Falha no smoke test: 'node --version' retornou vazio."
+            exit 1
+          fi
 
       - name: "Build & push"
         id: build
@@ -88,7 +147,10 @@ jobs:
 
           **Competências desenvolvidas:**
           - Build de imagem Docker
+          - Lint de Dockerfile com Hadolint
           - Scan de vulnerabilidades com Trivy (CRITICAL = 0)
+          - Relatório de vulnerabilidades como artefato
+          - Smoke test de execução do container
           - Publicação no GitHub Container Registry (GHCR) condicionada ao scan
           - Boas práticas de supply chain
 
@@ -110,5 +172,3 @@ jobs:
           name: level-3-certificate
           path: certificates/
           retention-days: 30
-
-

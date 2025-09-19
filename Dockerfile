@@ -2,7 +2,6 @@ FROM node:18-alpine AS base
 
 WORKDIR /app
 
-# Instala dependências do sistema necessárias para build de libs nativas se houver
 RUN apk add --no-cache libc6-compat
 
 COPY package*.json ./
