@@ -3,25 +3,129 @@ name: "Nível 3: Containers e Segurança"
 on:
   pull_request:
     types: [closed]
-    branches: [ desafio-nivel-3 ]
+    branches: [ main ]
 
 permissions:
   contents: read
   packages: write
 
 env:
+  NODE_VERSION: '18'
   CHALLENGE_LEVEL: 3
-  CHALLENGE_NAME: "containers-e-seguranca"
+  CHALLENGE_NAME: "containers-seguros"
+  IMAGE_REGISTRY: ghcr.io
   REGISTRY: ghcr.io
 
 jobs:
   build-scan-and-push:
     name: "Build, Lint, Trivy Scan e Push no GHCR"
-    if: #????
+    if: ${{ github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
 
     steps:
-      # AQUI VAI O CÓDIGO DO DESAFIO :)
+      - name: "Checkout do código"
+        uses: actions/checkout@v4
+
+      - name: "Dockerfile Lint (Hadolint)"
+        id: hadolint
+        shell: bash
+        run: |
+          if [[ ! -f Dockerfile ]]; then
+            echo "::error::Dockerfile não encontrado na raiz do repositório."
+            exit 1
+          fi
+
+          # Roda hadolint via container e salva o relatório
+          docker run --rm -i hadolint/hadolint < Dockerfile > lint-report.txt || true
+
+          echo "Relatório do Hadolint:"
+          cat lint-report.txt || true
+
+          # Falha se encontrar regras específicas
+          if grep -E 'DL3006|DL3008|DL4006' lint-report.txt >/dev/null 2>&1; then
+            echo "::error::Hadolint encontrou violações bloqueadoras (DL3006, DL3008 ou DL4006)."
+            exit 1
+          fi
+
+      - name: "Upload lint-report.txt"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: lint-report.txt
+          retention-days: 30
+
+      - name: "Login no GHCR"
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Compila nome do repo"
+        id: compile
+        run: |
+          FULL_IMAGE=$( echo "${REGISTRY}/${{ github.repository_owner }}/${{ vars.IMAGE_NAME }}:${{ github.sha }}" | tr '[:upper:]' '[:lower:]')
+          echo "full_image=$FULL_IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: "Build da imagem"
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ steps.compile.outputs.full_image }}
+
+      - name: "Trivy - Gerar relatório (sem falhar)"
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.compile.outputs.full_image }}
+          format: 'table'
+          output: 'trivy-report.txt'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL'
+
+      - name: "Upload trivy-report.txt"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.txt
+          retention-days: 30
+
+      - name: "Trivy - Enforcement (falha se CRITICAL)"
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.compile.outputs.full_image }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL'
+
+      - name: "Teste de execução da imagem (node --version)"
+        id: smoketest
+        run: |
+          set -euo pipefail
+          VERSION=$(docker run --rm ${{ steps.compile.outputs.full_image }} node --version || true)
+          echo "Node version output: ${VERSION}"
+          if [[ -z "${VERSION}" ]]; then
+            echo "::error::Falha no smoke test: 'node --version' retornou vazio."
+            exit 1
+          fi
+
+      - name: "Build & push"
+        id: build
+        uses: docker/build-push-action@v6
+        if: ${{ success() }}
+        with:
+          context: .
+          tags: ${{ steps.compile.outputs.full_image }}
+          push: true
+          provenance: false
+          sbom: false
 
   generate-certificate: # DAQUI PARA BAIXO, NÃO ALTERAR
     name: "Desafio Nível 3 - Certificado"
