@@ -3,7 +3,7 @@ name: "Nível 3: Containers e Segurança"
 on:
   pull_request:
     types: [closed]
-    branches: [ main ]
+    branches: [ desafio-nivel-3 ]
 
 permissions:
   contents: read
