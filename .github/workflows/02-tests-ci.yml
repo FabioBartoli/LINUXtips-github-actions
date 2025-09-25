@@ -1,7 +1,9 @@
 name: "Nível 2: Testes Automatizados"
 on:
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+      - desafio-nivel-3
 
 env:
   NODE_VERSION: '18'
