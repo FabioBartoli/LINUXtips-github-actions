@@ -86,4 +86,4 @@ Ao completar cada workflow com sucesso, você ganha os badges:
 ---
 **Feito pela comunidade LINUXtips.**
 
-Teste Trivy 123
+Teste Trivy
