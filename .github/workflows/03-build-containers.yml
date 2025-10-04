@@ -71,7 +71,7 @@ jobs:
           load: true
           tags: ${{ steps.compile.outputs.full_image }}
 
-      - name: "Trivy - Gerar relatório (sem falhar)"
+      - name: "Trivy - Scan"
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ steps.compile.outputs.full_image }}
