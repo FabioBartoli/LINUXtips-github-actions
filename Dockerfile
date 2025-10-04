@@ -2,7 +2,7 @@ FROM node:14-alpine3.13 AS base
 
 WORKDIR /app
 
-RUN apk add --no-cache gcompat=1.1.0-r4
+RUN apk add --no-cache gcompat=1.0.0-r1
 
 COPY package*.json ./
 
