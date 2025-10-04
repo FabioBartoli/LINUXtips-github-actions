@@ -2,11 +2,13 @@ FROM node:14-alpine3.13 AS base
 
 WORKDIR /app
 
-RUN apk add --no-cache gcompat=1.0.0-r1
+RUN apk add --no-cache gcompat=1.0.0-r1 bash curl
 
 COPY package*.json ./
 
-RUN npm ci
+RUN npm i -g npm@8 \
+ && npm --version \
+ && npm ci --omit=dev --no-audit --no-fund
 
 COPY . .
 
