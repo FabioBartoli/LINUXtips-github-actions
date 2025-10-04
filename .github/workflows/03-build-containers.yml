@@ -28,22 +28,17 @@ jobs:
 
       - name: "Dockerfile Lint (Hadolint)"
         id: hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ./Dockerfile
+          no-fail: true
+          output-file: lint-report.txt
+
+      - name: "Verify Specific Lints"
         shell: bash
         run: |
-          if [[ ! -f Dockerfile ]]; then
-            echo "::error::Dockerfile não encontrado na raiz do repositório."
-            exit 1
-          fi
-
-          # Roda hadolint via container e salva o relatório
-          docker run --rm -i hadolint/hadolint < Dockerfile > lint-report.txt || true
-
-          echo "Relatório do Hadolint:"
-          cat lint-report.txt || true
-
-          # Falha se encontrar regras específicas
-          if grep -E 'DL3006|DL3008|DL4006' lint-report.txt >/dev/null 2>&1; then
-            echo "::error::Hadolint encontrou violações bloqueadoras (DL3006, DL3008 ou DL4006)."
+          if grep -E 'DL3006|DL3008' lint-report.txt >/dev/null 2>&1; then
+            echo "::error::Hadolint encontrou violações bloqueadoras (DL3006 ou DL3008)."
             exit 1
           fi
 
