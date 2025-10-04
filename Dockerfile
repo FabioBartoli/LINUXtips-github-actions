@@ -6,7 +6,7 @@ RUN apk add --no-cache gcompat=1.0.0-r1
 
 COPY package*.json ./
 
-RUN npm ci --only=production --no-audit --no-fund
+RUN npm ci
 
 COPY . .
 
