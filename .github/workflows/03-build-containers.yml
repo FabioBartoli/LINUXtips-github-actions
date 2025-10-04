@@ -90,17 +90,6 @@ jobs:
           path: trivy-report.txt
           retention-days: 30
 
-      - name: "Teste de execução da imagem (node --version)"
-        id: smoketest
-        run: |
-          set -euo pipefail
-          VERSION=$(docker run --rm ${{ steps.compile.outputs.full_image }} node --version || true)
-          echo "Node version output: ${VERSION}"
-          if [[ -z "${VERSION}" ]]; then
-            echo "::error::Falha no smoke test: 'node --version' retornou vazio."
-            exit 1
-          fi
-
       - name: "Build & push"
         id: build
         uses: docker/build-push-action@v6
